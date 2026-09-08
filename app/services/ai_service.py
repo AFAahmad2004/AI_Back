@@ -57,6 +57,33 @@ def embed_text(text: str) -> list[float]:
         raise AIServiceError("تعذّر الاتصال بخدمة الذكاء الاصطناعي حاليًا.") from e
 
 
+def read_text_from_image_bytes(image_bytes: bytes, prompt: str) -> str:
+    """يستخدم قدرة Gemini الأصلية على قراءة الصور (Multimodal) — بديل عن
+    OCR تقليدي (Tesseract) لا يحتاج أي برنامج نظام خارجي، ويعمل على أي
+    بيئة استضافة قياسية (مثل Render) دون إعداد إضافي. راجع §7 و
+    app/services/text_extraction.py."""
+    client = _client()
+    try:
+        response = client.models.generate_content(
+            model=CHAT_MODEL,
+            contents=[
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
+                        types.Part(text=prompt),
+                    ],
+                )
+            ],
+            config=types.GenerateContentConfig(temperature=0.0),
+        )
+        return response.text or ""
+    except AIServiceUnavailable:
+        raise
+    except (APIError, Exception) as e:
+        raise AIServiceError("تعذّر الاتصال بخدمة الذكاء الاصطناعي حاليًا.") from e
+
+
 def chat_completion(
     system_prompt: str,
     user_prompt: str,

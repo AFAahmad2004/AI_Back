@@ -34,6 +34,12 @@ class GoogleAuthRequest(BaseModel):
     id_token: str
 
 
+class UpdateProfileRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    major: str | None = Field(default=None, max_length=120)
+    study_level: str | None = Field(default=None, max_length=60)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str

@@ -15,6 +15,7 @@ from app.schemas.auth import (
     GoogleAuthRequest,
     RefreshRequest,
     TokenResponse,
+    UpdateProfileRequest,
     UserLoginRequest,
     UserOut,
     UserRegisterRequest,
@@ -109,4 +110,23 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
+    return UserOut.model_validate(current_user)
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    payload: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """يحدّث الحقول الاختيارية للملف الشخصي (الاسم، التخصص، المستوى
+    الدراسي). أي حقل يصل بقيمة None لا يُعدَّل — فقط الحقول المُرسَلة فعليًا."""
+    if payload.name is not None:
+        current_user.name = payload.name
+    if payload.major is not None:
+        current_user.major = payload.major
+    if payload.study_level is not None:
+        current_user.study_level = payload.study_level
+    db.commit()
+    db.refresh(current_user)
     return UserOut.model_validate(current_user)
