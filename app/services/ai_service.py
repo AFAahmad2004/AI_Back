@@ -84,6 +84,43 @@ def read_text_from_image_bytes(image_bytes: bytes, prompt: str, mime_type: str =
         raise AIServiceError("تعذّر الاتصال بخدمة الذكاء الاصطناعي حاليًا.") from e
 
 
+def chat_completion_stream(
+    system_prompt: str,
+    user_prompt: str,
+    history: list[dict] | None = None,
+):
+    """
+    نسخة بثّية (Streaming) من chat_completion — تُعيد Generator يُصدر
+    أجزاء النص فور توليدها من Gemini، بدل انتظار الرد الكامل. هذا يُحسّن
+    الإحساس بالسرعة بشكل كبير في المحادثة (يظهر النص تدريجيًا كلمة بكلمة
+    مثل ChatGPT) بدل شاشة انتظار ثم ظهور كل شيء دفعة واحدة.
+    نفس منطق بناء السياق (history) والأدوار بالضبط كـ chat_completion.
+    """
+    client = _client()
+    try:
+        contents: list[types.Content] = []
+        for msg in (history or []):
+            role = "model" if msg["role"] == "assistant" else "user"
+            contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+        contents.append(types.Content(role="user", parts=[types.Part(text=user_prompt)]))
+
+        stream = client.models.generate_content_stream(
+            model=CHAT_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.3,
+            ),
+        )
+        for chunk in stream:
+            if chunk.text:
+                yield chunk.text
+    except AIServiceUnavailable:
+        raise
+    except (APIError, Exception) as e:
+        raise AIServiceError("تعذّر الاتصال بخدمة الذكاء الاصطناعي حاليًا.") from e
+
+
 def chat_completion(
     system_prompt: str,
     user_prompt: str,
