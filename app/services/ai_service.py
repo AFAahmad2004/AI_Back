@@ -1,8 +1,12 @@
+import logging
+
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
 from app.core.config import settings
+
+logger = logging.getLogger("ai_service")
 
 # gemini-3.6-flash: نموذج المحادثة السريع ضمن الطبقة المجانية من Gemini.
 # ⚠️ ملاحظة تحديث: كان الكود يستخدم "gemini-2.0-flash"، لكن Google أوقفت
@@ -54,6 +58,11 @@ def embed_text(text: str) -> list[float]:
         # الخارجية قد ترفع أنواع أخطاء متنوعة (شبكة، تحليل استجابة، حظر
         # محتوى) لا يمكن حصرها جميعًا مسبقًا — الأهم ألا يصل أي منها
         # كاستثناء غير مُعالَج إلى المستخدم.
+        # ⚠️ نُسجّل الخطأ الحقيقي الكامل (بما في ذلك Traceback) في لوغ
+        # الخادم قبل تحويله لرسالة عامة للمستخدم — بدون هذا، حتى لوغ
+        # Render نفسه لا يُظهر السبب الفعلي (اكتُشف هذا فعليًا من مستخدم
+        # حقيقي واجه رسالة عامة بلا أي تفاصيل قابلة للتشخيص في أي مكان).
+        logger.exception(f"فشل استدعاء Gemini الفعلي: {type(e).__name__}: {e}")
         raise AIServiceError("تعذّر الاتصال بخدمة الذكاء الاصطناعي حاليًا.") from e
 
 
@@ -81,6 +90,7 @@ def read_text_from_image_bytes(image_bytes: bytes, prompt: str, mime_type: str =
     except AIServiceUnavailable:
         raise
     except (APIError, Exception) as e:
+        logger.exception(f"فشل استدعاء Gemini الفعلي: {type(e).__name__}: {e}")
         raise AIServiceError("تعذّر الاتصال بخدمة الذكاء الاصطناعي حاليًا.") from e
 
 
@@ -118,6 +128,7 @@ def chat_completion_stream(
     except AIServiceUnavailable:
         raise
     except (APIError, Exception) as e:
+        logger.exception(f"فشل استدعاء Gemini الفعلي: {type(e).__name__}: {e}")
         raise AIServiceError("تعذّر الاتصال بخدمة الذكاء الاصطناعي حاليًا.") from e
 
 
@@ -155,4 +166,5 @@ def chat_completion(
     except AIServiceUnavailable:
         raise
     except (APIError, Exception) as e:
+        logger.exception(f"فشل استدعاء Gemini الفعلي: {type(e).__name__}: {e}")
         raise AIServiceError("تعذّر الاتصال بخدمة الذكاء الاصطناعي حاليًا.") from e
