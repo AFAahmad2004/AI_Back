@@ -41,7 +41,7 @@ def _render_page_to_png(file_path: str, page_number: int) -> bytes | None:
         return None
 
 
-def _read_text_from_image(image_bytes: bytes) -> str:
+def _read_text_from_image(image_bytes: bytes, mime_type: str = "image/png") -> str:
     """يستخدم قدرة Gemini الأصلية على قراءة الصور (Multimodal) لاستخراج
     النص منها — بديل عن Tesseract OCR التقليدي (§7). ميزتان مهمتان:
     1) لا يحتاج أي برنامج نظام خارجي (خلافًا لـ Tesseract الذي يحتاج
@@ -55,12 +55,31 @@ def _read_text_from_image(image_bytes: bytes) -> str:
     )
 
     try:
-        return read_text_from_image_bytes(image_bytes, _VISION_PROMPT).strip()
+        return read_text_from_image_bytes(image_bytes, _VISION_PROMPT, mime_type=mime_type).strip()
     except (AIServiceUnavailable, AIServiceError) as e:
         # بلا مفتاح Gemini، أو فشل اتصال — تبقى هذه الصفحة بلا نص، دون
         # إسقاط رفع الملف بالكامل (نفس فلسفة معالجة الأخطاء في كل المشروع).
         logger.warning(f"تعذّرت قراءة الصورة عبر Gemini: {e}")
         return ""
+
+
+def extract_image_page(file_path: str) -> list[dict]:
+    """
+    مخصَّص للملفات المرفوعة كصورة مباشرة (JPG/PNG، وليست مضمَّنة داخل PDF).
+    §7/§6: "تصوير المحاضرة بالكاميرا" يرفع صورة مباشرة، وليس PDF — يجب أن
+    يُعالَج هذا المسار بشكل مستقل عن extract_pdf_pages تمامًا (كان مفقودًا
+    بالكامل سابقًا: `pypdf` لا يستطيع فتح ملف JPG أصلًا فيفشل بصمت، وتبقى
+    الصورة المرفوعة بلا أي نص مستخرَج مهما كانت واضحة).
+    """
+    try:
+        with open(file_path, "rb") as f:
+            image_bytes = f.read()
+    except OSError:
+        return [{"page_number": 1, "text": "", "used_vision": False}]
+
+    mime_type = "image/png" if file_path.lower().endswith(".png") else "image/jpeg"
+    text = _read_text_from_image(image_bytes, mime_type=mime_type)
+    return [{"page_number": 1, "text": text, "used_vision": bool(text)}]
 
 
 def extract_pdf_pages(file_path: str) -> list[dict]:

@@ -57,7 +57,7 @@ def embed_text(text: str) -> list[float]:
         raise AIServiceError("تعذّر الاتصال بخدمة الذكاء الاصطناعي حاليًا.") from e
 
 
-def read_text_from_image_bytes(image_bytes: bytes, prompt: str) -> str:
+def read_text_from_image_bytes(image_bytes: bytes, prompt: str, mime_type: str = "image/png") -> str:
     """يستخدم قدرة Gemini الأصلية على قراءة الصور (Multimodal) — بديل عن
     OCR تقليدي (Tesseract) لا يحتاج أي برنامج نظام خارجي، ويعمل على أي
     بيئة استضافة قياسية (مثل Render) دون إعداد إضافي. راجع §7 و
@@ -70,7 +70,7 @@ def read_text_from_image_bytes(image_bytes: bytes, prompt: str) -> str:
                 types.Content(
                     role="user",
                     parts=[
-                        types.Part.from_bytes(data=image_bytes, mime_type="image/png"),
+                        types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                         types.Part(text=prompt),
                     ],
                 )

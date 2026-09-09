@@ -109,6 +109,48 @@ with patch("app.services.ai_service.genai.Client") as MockClient:
             f"-> {[c.content for c in chunks]}",
         )
 
+    # ========================================================
+    # اختبار الإصلاح الحقيقي: رفع صورة JPG مباشرة (وليست مضمَّنة داخل PDF)
+    # — هذا كان معطَّلًا بالكامل سابقًا (الشرط كان `if ext == ".pdf"` فقط).
+    # ========================================================
+    captured_calls.clear()
+    img2 = Image.new("RGB", (400, 300), color="white")
+    ImageDraw.Draw(img2).rectangle([5, 5, 395, 295], outline="black")
+    jpg_buf = io.BytesIO()
+    img2.save(jpg_buf, format="JPEG")
+    jpg_buf.seek(0)
+
+    r = client.post(
+        "/api/documents/upload",
+        headers=headers,
+        files={"file": ("my_photo.jpg", jpg_buf, "image/jpeg")},
+    )
+    check("Upload a DIRECT JPG image (not inside a PDF) succeeds", r.status_code == 201, f"-> {r.status_code} {r.text}")
+    jpg_doc_id = r.json()["id"] if r.status_code == 201 else None
+
+    check(
+        "Direct image upload triggers exactly one vision call",
+        len(captured_calls) == 1,
+        f"-> {len(captured_calls)} calls (this was 0 before the fix — image uploads were silently ignored)",
+    )
+    if captured_calls:
+        image_part = captured_calls[0]["contents"][0].parts[0]
+        check(
+            "Direct JPG upload sends correct mime_type (image/jpeg, not png)",
+            image_part.inline_data.mime_type == "image/jpeg",
+            f"-> {getattr(image_part.inline_data, 'mime_type', None)}",
+        )
+
+    if jpg_doc_id:
+        db = SessionLocal()
+        jpg_chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == jpg_doc_id).all()
+        db.close()
+        check(
+            "Direct JPG upload produces a real saved chunk (was always empty before the fix)",
+            len(jpg_chunks) == 1,
+            f"-> {len(jpg_chunks)} chunks",
+        )
+
 print()
 if failures:
     print(f"❌ {len(failures)} FAILURE(S): {failures}")

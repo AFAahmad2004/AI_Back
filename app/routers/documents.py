@@ -19,7 +19,7 @@ from app.models.user import User
 from app.schemas.document import DocumentOut
 from app.schemas.ai import SummaryRequest, SummaryResponse
 from app.services.pdf_service import count_pdf_pages
-from app.services.text_extraction import extract_pdf_pages
+from app.services.text_extraction import extract_pdf_pages, extract_image_page
 from app.services.chunking import chunk_pages
 from app.services.ai_service import AIServiceUnavailable, AIServiceError, chat_completion, embed_text
 
@@ -99,23 +99,30 @@ async def upload_document(
     # الملف أبدًا بسبب هذه الخطوة — إن تعذّرت المعالجة (PDF ممسوح ضوئيًا
     # بلا نص، أو AI غير مفعَّل)، يبقى الملف محفوظًا فقط بدون مقاطع، وتُظهر
     # ميزتا الملخص والمحادثة رسالة واضحة بدل الانهيار.
+    #
+    # ⚠️ إصلاح خطأ حقيقي: الصور المرفوعة مباشرة (JPG/PNG، وليست PDF) كانت
+    # تُتجاهَل بالكامل سابقًا — الشرط هنا كان `if ext == ".pdf"` فقط، فلا
+    # يحدث أي استخراج نص للصور إطلاقًا. الآن كل امتداد له مسار معالجة صريح.
     if ext == ".pdf":
         pages_text = extract_pdf_pages(file_path)
-        chunks = chunk_pages(pages_text)
-        for c in chunks:
-            embedding_json = None
-            try:
-                embedding_json = json.dumps(embed_text(c["content"]))
-            except (AIServiceUnavailable, AIServiceError):
-                pass  # سيُعاد المحاولة لاحقًا عبر بحث الكلمات المفتاحية كتراجع
-            db.add(DocumentChunk(
-                document_id=document.id,
-                chunk_index=c["chunk_index"],
-                page_number=c["page_number"],
-                content=c["content"],
-                embedding=embedding_json,
-            ))
-        db.commit()
+    else:
+        pages_text = extract_image_page(file_path)
+
+    chunks = chunk_pages(pages_text)
+    for c in chunks:
+        embedding_json = None
+        try:
+            embedding_json = json.dumps(embed_text(c["content"]))
+        except (AIServiceUnavailable, AIServiceError):
+            pass  # سيُعاد المحاولة لاحقًا عبر بحث الكلمات المفتاحية كتراجع
+        db.add(DocumentChunk(
+            document_id=document.id,
+            chunk_index=c["chunk_index"],
+            page_number=c["page_number"],
+            content=c["content"],
+            embedding=embedding_json,
+        ))
+    db.commit()
 
     return document
 

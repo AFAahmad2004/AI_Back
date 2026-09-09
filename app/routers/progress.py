@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.document import Document
-from app.models.quiz import QuizAttempt
+from app.models.quiz import Quiz, QuizAttempt
 from app.models.study_session import StudySession
 from app.models.user import User
 from app.schemas.progress import ProgressOut, TopicScoreOut, RecentQuizOut
@@ -57,8 +57,14 @@ def get_progress(
     """
     files_count = db.query(Document).filter(Document.owner_id == current_user.id).count()
 
+    # ⚡ تحسين أداء مهم: بدون joinedload، الوصول لاحقًا لـ a.quiz.document.title
+    # لكل محاولة كان يُنفّذ استعلامَين إضافيَّين منفصلَين (N+1) — مع مستخدم
+    # لديه 50 محاولة اختبار، هذا يعني 101 استعلام بدل استعلام واحد فقط.
+    # joinedload يجمع كل شيء في استعلام واحد عبر JOIN، بغض النظر عن عدد
+    # المحاولات — تم التحقق من هذا رقميًا (راجع اختبار عدّاد الاستعلامات).
     attempts = (
         db.query(QuizAttempt)
+        .options(joinedload(QuizAttempt.quiz).joinedload(Quiz.document))
         .filter(QuizAttempt.owner_id == current_user.id)
         .order_by(QuizAttempt.created_at.desc())
         .all()
